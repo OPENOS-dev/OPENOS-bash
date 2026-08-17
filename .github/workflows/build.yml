@@ -66,6 +66,9 @@ jobs:
                     mkdir -p "$WORK/src"
           cp -a "src/bash-5.3"/. "$WORK/src"/
           cd "$WORK/src"
+          # 防止 make 因时间戳触发 aclocal/automake 重生成 (版本不匹配时)
+          # coreutils-9.11 需 automake 1.18; 用 touch 使生成文件比源新
+          touch configure aclocal.m4 Makefile.in 2>/dev/null || true
           ./configure --host="$TARGET" --prefix=/usr --disable-nls >/dev/null
           make -j$(nproc) >/dev/null
           make DESTDIR="$WORK/pkg" install >/dev/null
