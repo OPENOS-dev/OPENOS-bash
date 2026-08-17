@@ -61,14 +61,17 @@ jobs:
             loong64)TARGET=loongarch64-openos-linux-gnu; CROSS=loongarch64-linux-gnu- ;;
           esac
           export TARGET CROSS
-          PKG="${COMPONENT}-${ARCH}-DEV2026.1.pkg.tar.zst"
           WORK="$(mktemp -d)"
-                    mkdir -p "$WORK/src"
+          PKG="$WORK/${COMPONENT}-${ARCH}-DEV2026.1.pkg.tar.zst"
+                    # coreutils-9.11 等需要 automake 1.18 (Ubuntu 24.04 仅 1.16)
+          if ! command -v aclocal-1.18 >/dev/null 2>&1; then
+            curl -fsSL https://ftp.gnu.org/gnu/automake/automake-1.18.tar.gz -o /tmp/am.tgz
+            tar xzf /tmp/am.tgz -C /tmp
+            ( cd /tmp/automake-1.18 && ./configure --prefix=/usr >/dev/null 2>&1 && make -j$(nproc) >/dev/null 2>&1 && sudo make install >/dev/null 2>&1 )
+          fi
+          mkdir -p "$WORK/src"
           cp -a "src/bash-5.3"/. "$WORK/src"/
           cd "$WORK/src"
-          # 防止 make 因时间戳触发 aclocal/automake 重生成 (版本不匹配时)
-          # coreutils-9.11 需 automake 1.18; 用 touch 使生成文件比源新
-          touch configure aclocal.m4 Makefile.in 2>/dev/null || true
           ./configure --host="$TARGET" --prefix=/usr --disable-nls >/dev/null
           make -j$(nproc) >/dev/null
           make DESTDIR="$WORK/pkg" install >/dev/null
@@ -87,11 +90,14 @@ jobs:
             exit 0
           fi
           ARCH="${{ matrix.arch }}"
-          PKG="${COMPONENT}-${ARCH}-DEV2026.1.pkg.tar.zst"
+          PKG="$WORK/${COMPONENT}-${ARCH}-DEV2026.1.pkg.tar.zst"
+          rm -rf /tmp/binpkg-repo
           git clone --depth 1 "https://x-access-token:${BINPKG_TOKEN}@github.com/${BINPKG_REPO}.git" /tmp/binpkg-repo
           cd /tmp/binpkg-repo
           mkdir -p "bins/${COMPONENT}/${ARCH}"
           cp -f "$GITHUB_WORKSPACE/${PKG}" "bins/${COMPONENT}/${ARCH}/"
+          # 构建成功: 删除对应的失败日志, 避免 failure-report 重复创建 Issue
+          rm -f "logs/${COMPONENT}/$ARCH.log"
           git config user.name "OPENOS CI"
           git config user.email "ci@openos.dev"
           git add -A
